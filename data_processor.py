@@ -21,8 +21,12 @@ class InvalidFormatError(DataProcessingError):
 class StructureMismatchError(DataProcessingError):
     pass
 
+# Исключение при ошибках валидации данных
+class DataValidationError(DataProcessingError):
+    pass
+
 class DataProcessor:
-    # Pаголовки столбцов для валидации
+    # Заголовки столбцов для валидации
     EXPECTED_HEADERS = [
         'Участники гражданского оборота', 'Тип операции', 'Сумма операции',
         'Вид расчета', 'Место оплаты', 'Терминал оплаты', 'Дата оплаты',
@@ -31,15 +35,14 @@ class DataProcessor:
 
     @classmethod
     def process_data(cls, filename):
-
         # Основной метод обработки данных.
         # Выполняет последовательность проверок и валидаций.
         # Возвращает True при успешной обработке, False при ошибках.
-
         try:
             cls._check_file_exists(filename)   # Проверка существования файла
             data = cls._read_file(filename)    # Чтение данных из файла
             cls._validate_structure(data)      # Валидация структуры данных
+            cls._validate_data(data[1])        # Валидация типов данных в строках
             print("Файл успешно обработан. Структура соответствует требованиям.")
             return True
         except DataProcessingError as e:
@@ -48,7 +51,7 @@ class DataProcessor:
 
     @classmethod
     def _check_file_exists(cls, filename):
-        # Проверка существования файла и его типа (регулярный файл)
+        # Проверка существования файла и его типа
         if not os.path.exists(filename):
             raise FileNotFoundError(f"Файл {filename} не найден")
         if not os.path.isfile(filename):
@@ -56,11 +59,9 @@ class DataProcessor:
 
     @classmethod
     def _read_file(cls, filename):
-
         # Чтение CSV файла и извлечение данных
         # Возвращает кортеж
         # Обрабатывает ошибки чтения и декодирования
-
         try:
             with open(filename, 'r', encoding='utf-8-sig') as file:
                 reader = csv.reader(file, delimiter=',')
@@ -81,11 +82,11 @@ class DataProcessor:
 
     @classmethod
     def _validate_structure(cls, data):
-        """
-        Валидация структуры данных:
-        - Сравнение количества столбцов
-        - Проверка соответствия названий заголовков
-        """
+
+        # Валидация структуры данных:
+        # - Сравнение количества столбцов
+        # - Проверка соответствия названий заголовков
+
         headers, _ = data
         # Проверка количества столбцов
         if len(headers) != len(cls.EXPECTED_HEADERS):
@@ -99,3 +100,16 @@ class DataProcessor:
                 raise StructureMismatchError(
                     f"Несоответствие структуры. Ожидался столбец: '{expected}', получен: '{actual}'"
                 )
+            
+    @classmethod
+    def _validate_data(cls, rows):
+        # Валидация типов данных в строках
+        for row_num, row in enumerate(rows, start=2):  # Начинаем с 2, т.к. 1 — заголовки
+            try:
+                float(row[2].strip().replace(',', '.'))  # Проверка записи
+            except ValueError:
+                raise DataValidationError(f"Некорректный тип данных в строке {row_num}, столбец 'Сумма операции'")
+            try:
+                float(row[10].strip().replace(',', '.'))  # Проверка 'Сумма cash-back'
+            except ValueError:
+                raise DataValidationError(f"Некорректный тип данных в строке {row_num}, столбец 'Сумма cash-back'")
